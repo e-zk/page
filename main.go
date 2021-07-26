@@ -340,6 +340,8 @@ func main() {
 	if err == subc.ErrNoSubc {
 		usage()
 		os.Exit(1)
+	} else if err == subc.ErrUsage {
+		os.Exit(0)
 	} else if err != nil {
 		log.Fatal(err)
 	}
