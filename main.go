@@ -42,7 +42,7 @@ func errPrint(format string, a ...interface{}) {
 
 // main usage/help message
 func usage() {
-	errPrint("usage: cpass [command] [args]\n\n")
+	errPrint("usage: page [command] [args]\n\n")
 	errPrint("where [command] can be:\n")
 	errPrint("  help  show this help message\n")
 	errPrint("  ls    list password entries\n")
@@ -50,7 +50,7 @@ func usage() {
 	errPrint("  save  save/add a new password entry\n")
 	errPrint("  rm    remove password entry\n")
 	errPrint("\n")
-	errPrint("for help with subcommands type: cpass [command] -h\n")
+	errPrint("for help with subcommands type: page [command] -h\n")
 }
 
 //
@@ -183,7 +183,6 @@ func getIdentity() (*age.X25519Identity, error) {
 	var strippedPrivkey string
 
 	for _, line := range strings.Split(string(privkey), "\n") {
-		log.Println(line)
 		if strings.HasPrefix(line, "#") {
 			continue
 		}
@@ -191,8 +190,6 @@ func getIdentity() (*age.X25519Identity, error) {
 			strippedPrivkey = line
 		}
 	}
-
-	log.Println(strippedPrivkey)
 
 	return age.ParseX25519Identity(strippedPrivkey)
 }
@@ -289,7 +286,7 @@ func initialise() {
 func main() {
 
 	log.SetFlags(0 | log.Lshortfile)
-	log.SetPrefix("cpass: ")
+	log.SetPrefix("page: ")
 
 	// get default password store location
 	configHome, err := os.UserConfigDir()
@@ -311,7 +308,7 @@ func main() {
 	subc.Sub("ls").StringVar(&storePath, "s", defaultStore, "path to password store")
 	subc.Sub("ls").Usage = func() {
 		errPrint("list all entries in store\n")
-		errPrint("usage: cpass ls [-s store]\n\n")
+		errPrint("usage: page ls [-s store]\n\n")
 		errPrint("  -s store  use given password store\n")
 	}
 
@@ -323,7 +320,7 @@ func main() {
 	subc.Sub("rm").BoolVar(&force, "f", false, "force remove entry (do not prompt)")
 	subc.Sub("rm").Usage = func() {
 		errPrint("remove a password entry\n")
-		errPrint("usage: cpass rm [-f] [-s store] <user@site>\n\n")
+		errPrint("usage: page rm [-f] [-s store] <user@site>\n\n")
 		errPrint("    -f          force - do not prompt before removing")
 		errPrint("    -s store    use password store")
 	}
@@ -333,14 +330,17 @@ func main() {
 
 	/*	subc.Sub("open").Usage = func() {
 		errPrint("open a password entry\n")
-		errPrint("usage: cpass open [-p] [-s store] [-k key_file] <user@site>\n\n")
+		errPrint("usage: page open [-p] [-s store] [-k key_file] <user@site>\n\n")
 		errPrint("  -p        print password to stdout\n")
 		errPrint("  -s store  use password store\n")
 		//errPrint("    -k key_file    supply key_file when using an encrypted store\n")
 	}*/
 
 	subcommand, err := subc.Parse()
-	if err != nil {
+	if err == subc.ErrNoSubc {
+		usage()
+		os.Exit(1)
+	} else if err != nil {
 		log.Fatal(err)
 	}
 
