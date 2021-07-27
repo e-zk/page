@@ -72,6 +72,20 @@ func clip(text string) (err error) {
 	return nil
 }
 
+// get XDG_DATA_HOME
+func userDataDir() (string, error) {
+	var path string
+	path = os.Getenv("XDG_DATA_HOME")
+	if path == "" {
+		path = os.Getenv("HOME")
+		if path == "" {
+			return "", errors.New("neither $XDG_DATA_HOME nor $HOME are defined")
+		}
+		path += "/.local/share"
+	}
+	return path, nil
+}
+
 // Read the recipient file and return an age.X25519Recipient
 func getRecipients() (*age.X25519Recipient, error) {
 	var pubkey []byte
@@ -264,32 +278,6 @@ func edit(editor string) error {
 	return nil
 }
 
-/*
-func initialise() {
-	id, err := age.GenerateX25519Identity()
-	if err != nil {
-		log.Fatalf("Failed to generate age key pair: %v", err)
-	}
-	//fmt.Fprintf(storePath+"/recipients", "%s", id.Recipient().String())
-	//fmt.Fprintf(storePath+"/privkey", "%s", id.String())
-	fmt.Fprintf(os.Stderr, "%s", id.Recipient().String())
-	fmt.Fprintf(os.Stderr, "%s", id.String())
-}
-*/
-
-func userDataDir() (string, error) {
-	var path string
-	path = os.Getenv("XDG_DATA_HOME")
-	if path == "" {
-		path = os.Getenv("HOME")
-		if path == "" {
-			return "", errors.New("neither $XDG_DATA_HOME nor $HOME are defined")
-		}
-		path += "/.local/share"
-	}
-	return path, nil
-}
-
 func main() {
 	log.SetFlags(0)
 	//log.SetFlags(0 | log.Lshortfile)
@@ -316,8 +304,8 @@ func main() {
 	}
 
 	editor, ok := os.LookupEnv("EDITOR")
-	// default to 'vi'
 	if !ok {
+		// default to 'vi'
 		editor = "vi"
 	}
 
@@ -331,32 +319,38 @@ func main() {
 
 	subc.Usage = usage
 
-	subc.Sub("help")
-	subc.Sub("ls")
-	subc.Sub("init")
+	subc.Sub("help").Usage = func() {
+		errPrint("help: show help\n")
+	}
+	subc.Sub("ls").Usage = func() {
+		errPrint("ls: list all secrets\n")
+		errPrint("usage: page ls\n")
+	}
+
 	subc.Sub("edit").StringVar(&editor, "e", editor, "editor")
+	subc.Sub("edit").Usage = func() {
+		errPrint("edit: create/edit a secret\n")
+		errPrint("usage: page edit [-e editor] <secret>\nwhere:\n")
+		errPrint("  -e editor  specify editor to use instead of $EDITOR\n")
+		errPrint("  <secret>   is the filename of the secret to edit\n")
+	}
 
 	subc.Sub("rm").BoolVar(&force, "f", false, "force remove entry (do not prompt)")
-	/*subc.Sub("rm").Usage = func() {
-		errPrint("remove a password entry\n")
-		errPrint("usage: page rm [-f] [-s store] <user@site>\n\n")
-		errPrint("  -f        force - do not prompt before removing")
-		errPrint("  -s store  use password store")
-	}*/
+	subc.Sub("rm").Usage = func() {
+		errPrint("rm: delete a secret\n")
+		errPrint("usage: page rm [-f] <secret>\nwhere:\n")
+		errPrint("  -f        forces deletion (does not prompt)\n")
+		errPrint("  <secret>  is the filename of the secret to remove\n")
 
-	//subc.Sub("ls").Usage = func() {
-	//	errPrint("list all entries in the store\n")
-	//	errPrint("usage: page ls\n\n")
-	//}
+	}
 
-	subc.Sub("open").BoolVar(&printPasswd, "p", false, "print password to stdout")
-
-	/*subc.Sub("open").Usage = func() {
-		errPrint("copies a password entry to the clipboard.\n")
-		errPrint("does not copy lines starting with '#'.\n")
-		errPrint("usage: page open [-p] [-s store] <user@site>\n\n")
-		errPrint("  -p        print password to stdout\n")
-	}*/
+	subc.Sub("open").BoolVar(&printPasswd, "p", false, "copy/print password to stdout")
+	subc.Sub("open").Usage = func() {
+		errPrint("open: copy secret content to clipboard\n")
+		errPrint("usage: page open [-p] <secret>\nwhere:\n")
+		errPrint("  -p        prints the secret instead of adding to clipboard\n")
+		errPrint("  <secret>  is the filename of the secret to remove\n")
+	}
 
 	subcommand, err := subc.Parse()
 	if err == subc.ErrNoSubc {
@@ -371,8 +365,6 @@ func main() {
 	switch subcommand {
 	case "help":
 		usage()
-	//case "init":
-	//	initialise()
 	case "ls":
 		list()
 	case "edit":
