@@ -5,13 +5,11 @@
 LINES=${LINES:-$(tput lines)}
 SEL="$(page ls | fzy -l $LINES)"
 
+# no selection, die
 [ -z "$SEL" ] && exit 0
 
+# edit if requested, open otherwise
 case "$1" in
-	"edit")
-		page open $SEL
-	;;
-	*)
-		page open $SEL
-	;;
+	"edit") page edit "$SEL" ;;
+	*)      page open "$SEL" ;;
 esac
