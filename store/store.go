@@ -12,6 +12,7 @@ import (
 
 // errors
 var (
+	ErrEntryExists   = errors.New("entry already exists")
 	ErrEntryNotExist = errors.New("entry does not exist")
 )
 
@@ -41,10 +42,20 @@ func (s Store) Entries() (es []string, err error) {
 
 // write content to encrypted secret
 func (s Store) WriteEntry(entry string, content []byte) error {
-	fp, err := os.OpenFile(s.Path+"/"+entry, os.O_RDWR|os.O_CREATE, 0644)
+	entryPath := s.Path + "/" + entry
+
+	err := os.WriteFile(entryPath, []byte{}, 0644)
 	if err != nil {
 		return err
 	}
+
+	fp, err := os.OpenFile(entryPath, os.O_WRONLY, 0644)
+	if err != nil {
+		return err
+	}
+	defer fp.Close()
+	//defer os.Chmod(s.Path+"/"+entry, 0644)
+
 	contentBuffer := bytes.NewBuffer(content)
 	aw := armor.NewWriter(fp)
 
