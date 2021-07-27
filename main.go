@@ -166,7 +166,7 @@ func open(printPasswd bool) {
 	}
 	s := store.Store{Path: storePath, Identity: id, Recipient: rec}
 
-	passwd, err := s.OpenEntry(entry)
+	passwd, err := s.ReadEntry(entry)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -227,7 +227,7 @@ func edit(editor string) error {
 
 	} else {
 		// otherwise, copy the content to the tmpfile
-		content, err := s.OpenEntry(entry)
+		content, err := s.ReadEntry(entry)
 		if err != nil {
 			log.Fatalf("Error during decryption: %v", err)
 		}

@@ -1,53 +1,33 @@
-// cpass/store
-// this package describes the model of a password store as well as password
-// entries
-
 package store
 
 import (
 	"bytes"
 	"errors"
-	"filippo.io/age"
-	"filippo.io/age/armor"
-	"fmt"
 	"io"
 	"os"
+
+	"filippo.io/age"
+	"filippo.io/age/armor"
 )
 
-const (
-	jsonIndent = "  "
-)
-
-// Store errors
+// errors
 var (
-	ErrStoreIsDir = errors.New("given path is a directory")
-	ErrStoreExt   = errors.New("given store has incorrect extension")
-	ErrStoreEnc   = errors.New("encrypted stores are not yet supported!")
-)
-
-// Entry errors
-var (
-	ErrEntryExists   = errors.New("entry already exists")
 	ErrEntryNotExist = errors.New("entry does not exist")
 )
 
-// password store struct
+// secret store struct
 type Store struct {
 	Path      string
 	Identity  *age.X25519Identity
 	Recipient *age.X25519Recipient
 }
 
-// password entry struct
+// secret entry struct (file)
 type Entry struct {
 	Path string
 }
 
-// typedef a slice of entry structs
-type Entries []string
-
-// return list of bookmarks belonging to store
-// list
+// return list of secrets in store
 func (s Store) Entries() (es []string, err error) {
 	files, err := os.ReadDir(s.Path)
 	if err != nil {
@@ -59,7 +39,7 @@ func (s Store) Entries() (es []string, err error) {
 	return es, nil
 }
 
-// write encrypt an entry file
+// write content to encrypted secret
 func (s Store) WriteEntry(entry string, content []byte) error {
 	fp, err := os.OpenFile(s.Path+"/"+entry, os.O_RDWR|os.O_CREATE, 0644)
 	if err != nil {
@@ -86,7 +66,16 @@ func (s Store) WriteEntry(entry string, content []byte) error {
 	return nil
 }
 
-func (s Store) OpenEntry(entry string) (content []byte, err error) {
+// read content from encrypted secret
+func (s Store) ReadEntry(entry string) (content []byte, err error) {
+	ok, err := s.EntryExists(entry)
+	if err != nil {
+		return []byte{}, err
+	}
+	if !ok {
+		return []byte{}, ErrEntryNotExist
+	}
+
 	enc, err := os.ReadFile(s.Path + "/" + entry)
 	if err != nil {
 		return []byte{}, err
@@ -108,7 +97,7 @@ func (s Store) OpenEntry(entry string) (content []byte, err error) {
 	return out.Bytes(), nil
 }
 
-// check if an entry exists within a store
+// check if a secret exists within a store
 func (s Store) EntryExists(entry string) (exists bool, err error) {
 	es, err := s.Entries()
 	if err != nil {
@@ -126,14 +115,11 @@ func (s Store) EntryExists(entry string) (exists bool, err error) {
 
 // delete a passwoard entry from a store
 func (s Store) RemoveEntry(entry string) error {
-	// get entries
-	found, err := s.EntryExists(entry)
+	ok, err := s.EntryExists(entry)
 	if err != nil {
 		return err
 	}
-
-	// not found
-	if !found {
+	if !ok {
 		return ErrEntryNotExist
 	}
 
@@ -145,34 +131,3 @@ func (s Store) RemoveEntry(entry string) error {
 
 	return nil
 }
-
-// generate password for password entry
-//func (e Entry) GenPassword(secret []byte) string {
-//	salt := fmt.Sprintf("%s@%s", e.Username, e.Url)
-//	//return crypto.CryptoPass(secret, []byte(salt), e.Length)
-//}
-
-// output string representation of a list of bookmarks
-func (es Entries) String() (out string) {
-	for _, e := range es {
-		out = fmt.Sprintf("%s%s\n", out, e)
-	}
-	return out
-}
-
-// from a list of password entries, find the one matching the given username + url
-/*
-func (es Entries) Get(givenId string) *Entry {
-	//givenId := fmt.Sprintf("%s@%s", username, url)
-
-	for _, e := range es {
-		id := fmt.Sprintf("%s@%s", e.Username, e.Url)
-
-		if id == givenId {
-			return &e
-		}
-	}
-
-	return nil
-}
-*/
