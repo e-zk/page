@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -19,23 +20,17 @@ import (
 	"github.com/e-zk/wslcheck"
 )
 
-// TODO remove
-const (
-	RecipientsPath = "/home/zzz/etc/page/recipients"
-	PrivateKeyPath = "/home/zzz/etc/page/privkey"
-)
-
 const (
 	wslClipPath = "/mnt/c/Windows/system32/clip.exe"
-	warnPrint   = "warning: will print password to standard output"
-	defaultLen  = 16
 )
 
 var (
-	storePath string
+	recipientsPath string
+	privateKeyPath string
+	storePath      string
 )
 
-// wrapper for Fprintf to print to stdout
+// wrapper for Fprintf to print to stderr
 func errPrint(format string, a ...interface{}) {
 	fmt.Fprintf(os.Stderr, format, a...)
 }
@@ -53,7 +48,7 @@ func usage() {
 	errPrint("for help with subcommands type: page [command] -h\n")
 }
 
-//
+// clipboard function
 func clip(text string) (err error) {
 	wsl, err := wslcheck.Check()
 	if err != nil {
@@ -77,7 +72,37 @@ func clip(text string) (err error) {
 	return nil
 }
 
-// list all password entries
+// Read the recipient file and return an age.X25519Recipient
+func getRecipients() (*age.X25519Recipient, error) {
+	var pubkey []byte
+	pubkey, err := os.ReadFile(recipientsPath)
+	if err != nil {
+		return nil, nil
+	}
+	return age.ParseX25519Recipient(string(pubkey))
+}
+
+// Read the private key and return an age.X25519Identity
+func getIdentity() (*age.X25519Identity, error) {
+	var privkey []byte
+	privkey, err := os.ReadFile(privateKeyPath)
+	if err != nil {
+		return nil, nil
+	}
+
+	var strippedPrivkey string
+
+	for _, line := range strings.Split(string(privkey), "\n") {
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+		strippedPrivkey = line
+	}
+
+	return age.ParseX25519Identity(strippedPrivkey)
+}
+
+// List all password entries
 func list() {
 	s := store.Store{Path: storePath}
 
@@ -91,23 +116,25 @@ func list() {
 	}
 }
 
-// remove a password entry
+// Remove a password entry
 func remove(force bool) {
-	entryId := subc.Sub("rm").Arg(0)
+	entry := subc.Sub("rm").Arg(0)
 
 	// create a new store
+	// (we do not require identity/recipient for this operation)
 	s := store.Store{Path: storePath}
 
-	ok, err := s.EntryExists(entryId)
+	// check if the entry exists
+	ok, err := s.EntryExists(entry)
 	if err != nil {
 		log.Fatal(err)
 	}
 	if !ok {
-		log.Fatalf("entry %s does not exist", entryId)
+		log.Fatalf("entry %s does not exist", entry)
 	}
 
 	if !force {
-		ch, err := term.Ask("remove entry " + entryId + "?")
+		ch, err := term.Ask("remove entry " + entry + "?")
 		if err != nil {
 			log.Fatal(err)
 		}
@@ -118,7 +145,7 @@ func remove(force bool) {
 		}
 	}
 
-	err = s.RemoveEntry(entryId)
+	err = s.RemoveEntry(entry)
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -126,9 +153,8 @@ func remove(force bool) {
 
 // open a password entry
 func open(printPasswd bool) {
-	if printPasswd {
-		errPrint("%s\n", warnPrint)
-	}
+	var content string
+	entry := subc.Sub("open").Arg(0)
 
 	rec, err := getRecipients()
 	if err != nil {
@@ -138,10 +164,8 @@ func open(printPasswd bool) {
 	if err != nil {
 		log.Fatalf("Error parsing private key file: %s", err)
 	}
-
 	s := store.Store{Path: storePath, Identity: id, Recipient: rec}
 
-	entry := subc.Sub("open").Arg(0)
 	passwd, err := s.OpenEntry(entry)
 	if err != nil {
 		log.Fatal(err)
@@ -153,50 +177,29 @@ func open(printPasswd bool) {
 	//	log.Fatal(err)
 	//}
 
+	for _, line := range strings.Split(string(passwd), "\n") {
+		if strings.HasPrefix(line, "#") || line == "" {
+			continue
+		}
+		content = content + line + "\n"
+	}
+
 	if printPasswd {
-		fmt.Printf("%s\n", string(passwd))
+		fmt.Printf("%s\n", content)
 		return
 	}
 
-	err = clip(string(passwd))
+	err = clip(content)
 	if err != nil {
 		log.Fatal(err)
 	}
 }
 
-func getRecipients() (*age.X25519Recipient, error) {
-	var pubkey []byte
-	pubkey, err := os.ReadFile(RecipientsPath)
-	if err != nil {
-		return nil, nil
-	}
-	return age.ParseX25519Recipient(string(pubkey))
-}
-
-func getIdentity() (*age.X25519Identity, error) {
-	var privkey []byte
-	privkey, err := os.ReadFile(PrivateKeyPath)
-	if err != nil {
-		return nil, nil
-	}
-
-	var strippedPrivkey string
-
-	for _, line := range strings.Split(string(privkey), "\n") {
-		if strings.HasPrefix(line, "#") {
-			continue
-		}
-		if line != "" {
-			strippedPrivkey = line
-		}
-	}
-
-	return age.ParseX25519Identity(strippedPrivkey)
-}
-
-func edit() error {
+func edit(editor string) error {
+	var contentBuffer *bytes.Buffer
 	entry := subc.Sub("edit").Arg(0)
 
+	// setup store
 	rec, err := getRecipients()
 	if err != nil {
 		log.Fatalf("Error parsing recipients file: %v", err)
@@ -205,35 +208,25 @@ func edit() error {
 	if err != nil {
 		log.Fatalf("Error parsing private key file: %s", err)
 	}
-
-	var contentBuffer *bytes.Buffer
-	/// TODO
-	// IF FILE DOES NOT EXIST CREATE IT
-	// copy to decrypted to tmpfile
-	// open $EDITOR on tmpfile
-	// read tmpfile
-	// re-encrypt tmpfile to overwrite entryfile
-
 	s := store.Store{Path: storePath, Identity: id, Recipient: rec}
 
+	// create temporary file
 	tmp, err := os.CreateTemp(os.TempDir(), "page-*")
 	if err != nil {
-		log.Fatalf("Erro creating tempfile: %v", err)
+		log.Fatalf("Error creating temporary file: %v", err)
 	}
+
+	// when this function returns the file will be closed and removed
 	defer tmp.Close()
 	defer os.Remove(tmp.Name())
 
+	// does the entry exist?
 	if _, err = os.Stat(storePath + "/" + entry); os.IsNotExist(err) {
-		// create file
-		//_, err := os.Create(storePath + "/" + entry)
-		//if err != nil {
-		//	log.Fatal(err)
-		//}
-
+		// empty buffer, since the file has no content
 		contentBuffer = &bytes.Buffer{}
 
 	} else {
-
+		// otherwise, copy the content to the tmpfile
 		content, err := s.OpenEntry(entry)
 		if err != nil {
 			log.Fatalf("Error during decryption: %v", err)
@@ -241,12 +234,13 @@ func edit() error {
 		contentBuffer = bytes.NewBuffer(content)
 
 		if _, err = io.Copy(tmp, contentBuffer); err != nil {
-			log.Fatalf("Error writing to tempfile: %v", err)
+			log.Fatalf("Error writing to temporary file: %v", err)
 		}
 
 	}
 
-	cmd := exec.Command("vise", tmp.Name())
+	// open $EDITOR on the tempfile
+	cmd := exec.Command(editor, tmp.Name())
 	cmd.Stdin = os.Stdin
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -260,11 +254,11 @@ func edit() error {
 		log.Fatal(err)
 	}
 
+	// overwrite the entry with the temporary file content
 	tmpContent, err := os.ReadFile(tmp.Name())
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	s.WriteEntry(entry, tmpContent)
 
 	return nil
@@ -283,57 +277,85 @@ func initialise() {
 }
 */
 
-func main() {
+func userDataDir() (string, error) {
+	var path string
+	path = os.Getenv("XDG_DATA_HOME")
+	if path == "" {
+		path = os.Getenv("HOME")
+		if path == "" {
+			return "", errors.New("neither $XDG_DATA_HOME nor $HOME are defined")
+		}
+		path += "/.local/share"
+	}
+	return path, nil
+}
 
-	log.SetFlags(0 | log.Lshortfile)
+func main() {
+	log.SetFlags(0)
+	//log.SetFlags(0 | log.Lshortfile)
 	log.SetPrefix("page: ")
 
-	// get default password store location
-	configHome, err := os.UserConfigDir()
-	if err != nil {
-		log.Fatal(err)
-	}
-	defaultStore := configHome + "/page/secrets"
-	storePath = defaultStore
-
 	var (
+		editor      string
 		printPasswd bool
 		force       bool
 	)
 
+	/*
+		env vars
+	*/
+
+	configHome, err := os.UserConfigDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	dataHome, err := userDataDir()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	editor, ok := os.LookupEnv("EDITOR")
+	// default to 'vi'
+	if !ok {
+		editor = "vi"
+	}
+
+	storePath = dataHome + "/page/secrets"
+	recipientsPath = configHome + "/page/recipients"
+	privateKeyPath = configHome + "/page/privkey"
+
+	/*
+		subcommands
+	*/
+
 	subc.Usage = usage
 
 	subc.Sub("help")
+	subc.Sub("ls")
+	subc.Sub("init")
+	subc.Sub("edit").StringVar(&editor, "e", editor, "editor")
 
-	subc.Sub("ls").StringVar(&storePath, "s", defaultStore, "path to password store")
-	subc.Sub("ls").Usage = func() {
-		errPrint("list all entries in store\n")
-		errPrint("usage: page ls [-s store]\n\n")
-		errPrint("  -s store  use given password store\n")
-	}
-
-	subc.Sub("init").StringVar(&storePath, "s", defaultStore, "path to password store")
-
-	subc.Sub("edit").StringVar(&storePath, "s", defaultStore, "path to password store")
-
-	subc.Sub("rm").StringVar(&storePath, "s", defaultStore, "path to password store")
 	subc.Sub("rm").BoolVar(&force, "f", false, "force remove entry (do not prompt)")
-	subc.Sub("rm").Usage = func() {
+	/*subc.Sub("rm").Usage = func() {
 		errPrint("remove a password entry\n")
 		errPrint("usage: page rm [-f] [-s store] <user@site>\n\n")
-		errPrint("    -f          force - do not prompt before removing")
-		errPrint("    -s store    use password store")
-	}
+		errPrint("  -f        force - do not prompt before removing")
+		errPrint("  -s store  use password store")
+	}*/
 
-	subc.Sub("open").StringVar(&storePath, "s", defaultStore, "path to password store")
+	//subc.Sub("ls").Usage = func() {
+	//	errPrint("list all entries in the store\n")
+	//	errPrint("usage: page ls\n\n")
+	//}
+
 	subc.Sub("open").BoolVar(&printPasswd, "p", false, "print password to stdout")
 
-	/*	subc.Sub("open").Usage = func() {
-		errPrint("open a password entry\n")
-		errPrint("usage: page open [-p] [-s store] [-k key_file] <user@site>\n\n")
+	/*subc.Sub("open").Usage = func() {
+		errPrint("copies a password entry to the clipboard.\n")
+		errPrint("does not copy lines starting with '#'.\n")
+		errPrint("usage: page open [-p] [-s store] <user@site>\n\n")
 		errPrint("  -p        print password to stdout\n")
-		errPrint("  -s store  use password store\n")
-		//errPrint("    -k key_file    supply key_file when using an encrypted store\n")
 	}*/
 
 	subcommand, err := subc.Parse()
@@ -354,7 +376,7 @@ func main() {
 	case "ls":
 		list()
 	case "edit":
-		edit()
+		edit(editor)
 	case "rm":
 		remove(force)
 	case "open":
