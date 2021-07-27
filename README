@@ -1,0 +1,76 @@
+
+ page
+======
+password manager using age (https://age-encryption.org/) for encryption.
+
+encrypted secrets are files in the $PAGE_SECRETS/ directory that are encrypted
+using the $PAGE_RECIPIENTS age public key.
+
+when opening/editing an encrypted secret the file is decrypted usingj
+$PAGE_PRIVKEY to a temporary file which is then opened in $EDITOR. after
+closing the temporary file the secret in $PAGE_SECRETS/ is replaced with the
+updated encrypted secret.
+
+since secrets are just plaintext files you can store whatever you want in them:
+passwords, notes, etc.
+when using the 'open' subcommand an entry's content is copied to the clipboard
+excluding any lines that start with a '#'.
+
+ building 
+----------
+$ make
+$ make install
+
+ usage 
+-------
+usage: page <command> [args]
+where <command> can be any of:
+* help  show help message
+* ls    list password entries
+* open  copy a password entry to the clipboard
+* edit  create/edit an entry using $EDITOR
+* rm    remove password entry
+
+see 'page <command> -h' to read the help message for a specific subcommand.
+
+ environment
+-------------
+page's functionality can be configured via environment variables. the following
+table lists environment variables and their defaults.
+
+ env              | default                          
+------------------|----------------------------------
+ $PAGE_PRIVKEY    | $XDG_CONFIG_HOME/page/privkey    
+ $PAGE_RECIPIENTS | $XDG_CONFIG_HOME/page/recipients 
+ $PAGE_SECRETS    | $XDG_DATA_HOME/page/secrets/     
+
+$PAGE_PRIVKEY holds a path to an age(1) private key.
+$PAGE_RECIPIENTS contains the path to the associated age(1) public key.
+$PAGE_SECRETS should point to a directory containing encrypted entries.
+
+ key setup
+-----------
+in order to start using page you must first generate an age keypair. install
+age and use the age-keygen command:
+
+$ age-keygen -o $PAGE_PRIVKEY
+Public key: age1[...]
+
+copy the public key into the $PAGE_RECIPIENTS file.
+it is also recommended to lock down the permissions of these files:
+
+$ chmod 0600 $PAGE_PRIVKEY
+$ chmod 0644 $PAGE_RECIPIENTS
+
+ scripting
+----------
+the contrib/ directory contains some scripts for working with page. feel free
+to open a PR if you have a script for page that you'd like to share.
+
+ inspiration
+-------------
+this project is inspired by:
+* https://github.com/somasis/passage
+* https://github.com/dylanaraps/pash
+* https://github.com/e-zk/cpass (predecessor)
+
