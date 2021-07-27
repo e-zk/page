@@ -18,8 +18,14 @@ excluding any lines that start with a '#'.
 
  building 
 ----------
+to build run make:
+
 $ make
 $ make install
+
+to install do a different prefix:
+
+$ make PREFIX=$SOME_PREFIX install
 
  usage 
 -------
@@ -63,9 +69,9 @@ $ chmod 0600 $PAGE_PRIVKEY
 $ chmod 0644 $PAGE_RECIPIENTS
 
  scripting
-----------
+-----------
 the contrib/ directory contains some scripts for working with page. feel free
-to open a PR if you have a script for page that you'd like to share.
+to open a PR if you have a script using page that you'd like to share.
 
  inspiration
 -------------
