@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"io"
@@ -209,7 +211,26 @@ func open(printPasswd bool) {
 	}
 }
 
-func edit(editor string) error {
+func openEditor(editor string, path string) error {
+	// open $EDITOR on the tempfile
+	cmd := exec.Command(editor, path)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+
+	err := cmd.Start()
+	if err != nil {
+		return err
+	}
+	err = cmd.Wait()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func edit(editor string) {
 	var contentBuffer *bytes.Buffer
 	entry := subc.Sub("edit").Arg(0)
 
@@ -253,19 +274,62 @@ func edit(editor string) error {
 
 	}
 
-	// open $EDITOR on the tempfile
-	cmd := exec.Command(editor, tmp.Name())
-	cmd.Stdin = os.Stdin
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	openEditor(editor, tmp.Name())
 
-	err = cmd.Start()
+	// overwrite the entry with the temporary file content
+	tmpContent, err := os.ReadFile(tmp.Name())
 	if err != nil {
 		log.Fatal(err)
 	}
-	err = cmd.Wait()
+	s.WriteEntry(entry, tmpContent)
+}
+
+func generate(length int) {
+	entry := subc.Sub("gen").Arg(0)
+
+	// setup store
+	rec, err := getRecipients()
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("Error parsing recipients file: %v", err)
+	}
+	id, err := getIdentity()
+	if err != nil {
+		log.Fatalf("Error parsing private key file: %s", err)
+	}
+	s := store.Store{Path: storePath, Identity: id, Recipient: rec}
+
+	// create temporary file
+	tmp, err := os.CreateTemp(os.TempDir(), "page-*")
+	if err != nil {
+		log.Fatalf("Error creating temporary file: %v", err)
+	}
+
+	// when this function returns the file will be closed and removed
+	defer tmp.Close()
+	defer os.Remove(tmp.Name())
+
+	// does the entry exist?
+	if _, err = os.Stat(storePath + "/" + entry); os.IsNotExist(err) {
+		contentBuffer := &bytes.Buffer{}
+		randBytes := make([]byte, length)
+
+		_, err := rand.Read(randBytes)
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		//base64.RawStdEncoding.Encode(b64, randBytes)
+		encoder := base64.NewEncoder(base64.StdEncoding, contentBuffer)
+		encoder.Write(randBytes)
+		encoder.Close()
+		//contentBuffer = bytes.NewBuffer(b64)
+
+		if _, err = io.Copy(tmp, contentBuffer); err != nil {
+			log.Fatalf("Error writing to temporary file: %v", err)
+		}
+
+	} else {
+		log.Fatal(errors.New("entry already exists!"))
 	}
 
 	// overwrite the entry with the temporary file content
@@ -274,8 +338,6 @@ func edit(editor string) error {
 		log.Fatal(err)
 	}
 	s.WriteEntry(entry, tmpContent)
-
-	return nil
 }
 
 func main() {
@@ -285,6 +347,7 @@ func main() {
 
 	var (
 		editor      string
+		length      int
 		printPasswd bool
 		force       bool
 	)
@@ -335,6 +398,15 @@ func main() {
 		errPrint("  <secret>   is the filename of the secret to edit\n")
 	}
 
+	subc.Sub("gen").StringVar(&editor, "e", editor, "editor")
+	subc.Sub("gen").IntVar(&length, "l", 12, "length")
+	subc.Sub("gen").Usage = func() {
+		errPrint("gen: randomly generate a secret\n")
+		errPrint("usage: page gen [-l length] <secret>\nwhere:\n")
+		errPrint("  -l length  specify length of string to be generated\n")
+		errPrint("  <secret>   is the filename of the secret to edit\n")
+	}
+
 	subc.Sub("rm").BoolVar(&force, "f", false, "force remove entry (do not prompt)")
 	subc.Sub("rm").Usage = func() {
 		errPrint("rm: delete a secret\n")
@@ -369,6 +441,8 @@ func main() {
 		list()
 	case "edit":
 		edit(editor)
+	case "gen":
+		generate(length)
 	case "rm":
 		remove(force)
 	case "open":
