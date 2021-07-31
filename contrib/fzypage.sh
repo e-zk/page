@@ -8,8 +8,5 @@ SEL="$(page ls | fzy -l $LINES)"
 # no selection, die
 [ -z "$SEL" ] && exit 0
 
-# edit if requested, open otherwise
-case "$1" in
-	"edit") page edit "$SEL" ;;
-	*)      page open "$SEL" ;;
-esac
+# do what is requested, open otherwise
+page "${1:-open}" "$SEL" ;;
