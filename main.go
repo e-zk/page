@@ -23,6 +23,7 @@ import (
 )
 
 const (
+	tmpName     = "page-*"
 	wslClipPath = "/mnt/c/Windows/system32/clip.exe"
 )
 
@@ -156,7 +157,7 @@ func remove(force bool) {
 		}
 
 		if !ch {
-			errPrint("aborted.\n")
+			log.Println("aborted.")
 			return
 		}
 	}
@@ -231,7 +232,6 @@ func openEditor(editor string, path string) error {
 }
 
 func edit(editor string) {
-	var contentBuffer *bytes.Buffer
 	entry := subc.Sub("edit").Arg(0)
 
 	// setup store
@@ -246,7 +246,7 @@ func edit(editor string) {
 	s := store.Store{Path: storePath, Identity: id, Recipient: rec}
 
 	// create temporary file
-	tmp, err := os.CreateTemp(os.TempDir(), "page-*")
+	tmp, err := os.CreateTemp(os.TempDir(), tmpName)
 	if err != nil {
 		log.Fatalf("Error creating temporary file: %v", err)
 	}
@@ -256,11 +256,8 @@ func edit(editor string) {
 	defer os.Remove(tmp.Name())
 
 	// does the entry exist?
-	if _, err = os.Stat(storePath + "/" + entry); os.IsNotExist(err) {
-		// empty buffer, since the file has no content
-		contentBuffer = &bytes.Buffer{}
-
-	} else {
+	if _, err = os.Stat(storePath + "/" + entry); !os.IsNotExist(err) {
+		var contentBuffer *bytes.Buffer
 		// otherwise, copy the content to the tmpfile
 		content, err := s.ReadEntry(entry)
 		if err != nil {
@@ -299,32 +296,30 @@ func generate(length int) {
 	s := store.Store{Path: storePath, Identity: id, Recipient: rec}
 
 	// create temporary file
-	tmp, err := os.CreateTemp(os.TempDir(), "page-*")
+	tmp, err := os.CreateTemp(os.TempDir(), tmpName)
 	if err != nil {
 		log.Fatalf("Error creating temporary file: %v", err)
 	}
 
-	// when this function returns the file will be closed and removed
 	defer tmp.Close()
 	defer os.Remove(tmp.Name())
 
-	// does the entry exist?
 	if _, err = os.Stat(storePath + "/" + entry); os.IsNotExist(err) {
 		contentBuffer := &bytes.Buffer{}
-		randBytes := make([]byte, length)
 
+		// get (too many) random bytes
+		randBytes := make([]byte, length)
 		_, err := rand.Read(randBytes)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		//base64.RawStdEncoding.Encode(b64, randBytes)
 		encoder := base64.NewEncoder(base64.StdEncoding, contentBuffer)
 		encoder.Write(randBytes)
 		encoder.Close()
-		//contentBuffer = bytes.NewBuffer(b64)
 
-		if _, err = io.Copy(tmp, contentBuffer); err != nil {
+		// only copy length bytes (runes) to tmp
+		if _, err = io.CopyN(tmp, contentBuffer, int64(length)); err != nil {
 			log.Fatalf("Error writing to temporary file: %v", err)
 		}
 
