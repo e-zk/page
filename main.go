@@ -16,15 +16,27 @@ import (
 
 	"github.com/e-zk/page/store"
 	"github.com/e-zk/page/term"
-
-	"github.com/atotto/clipboard"
 	"github.com/e-zk/subc"
 	"github.com/e-zk/wslcheck"
+
+	"github.com/atotto/clipboard"
 )
 
 const (
 	tmpName     = "page-*"
 	wslClipPath = "/mnt/c/Windows/system32/clip.exe"
+	usageString = `usage: page [command] [args ...]
+
+where [command] can be:
+  help  show this help message
+  init  generate age keypair
+  ls    list password entries
+  open  open/view a password entry
+  save  save/add a new password entry
+  rm    remove password entry
+
+for help with subcommands type: page [command] -h
+`
 )
 
 var (
@@ -40,15 +52,7 @@ func errPrint(format string, a ...interface{}) {
 
 // main usage/help message
 func usage() {
-	errPrint("usage: page [command] [args]\n\n")
-	errPrint("where [command] can be:\n")
-	errPrint("  help  show this help message\n")
-	errPrint("  ls    list password entries\n")
-	errPrint("  open  open/view a password entry\n")
-	errPrint("  save  save/add a new password entry\n")
-	errPrint("  rm    remove password entry\n")
-	errPrint("\n")
-	errPrint("for help with subcommands type: page [command] -h\n")
+	errPrint(usageString)
 }
 
 // clipboard function
@@ -117,6 +121,35 @@ func getIdentity() (*age.X25519Identity, error) {
 	}
 
 	return age.ParseX25519Identity(strippedPrivkey)
+}
+
+// generate age key pair
+func initKeys() {
+	pk, err := age.GenerateX25519Identity()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	pkFd, err := os.OpenFile(privateKeyPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		log.Fatal(err)
+	}
+	rFd, err := os.OpenFile(recipientsPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer func() {
+		if err := pkFd.Close(); err != nil {
+			log.Fatal(err)
+		}
+		if err := rFd.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	fmt.Fprintf(pkFd, "%s\n", pk)
+	fmt.Fprintf(rFd, "%s\n", pk.Recipient())
 }
 
 // List all password entries
@@ -336,8 +369,8 @@ func generate(length int) {
 }
 
 func main() {
-	log.SetFlags(0)
 	//log.SetFlags(0 | log.Lshortfile)
+	log.SetFlags(0)
 	log.SetPrefix("page: ")
 
 	var (
@@ -363,7 +396,7 @@ func main() {
 
 	editor, ok := os.LookupEnv("EDITOR")
 	if !ok {
-		// default to 'vi'
+		// default editor to 'vi'
 		editor = "vi"
 	}
 
@@ -383,6 +416,10 @@ func main() {
 	subc.Sub("ls").Usage = func() {
 		errPrint("ls: list all secrets\n")
 		errPrint("usage: page ls\n")
+	}
+	subc.Sub("init").Usage = func() {
+		errPrint("init: generate key pair\n")
+		errPrint("usage: page init\n")
 	}
 
 	subc.Sub("edit").StringVar(&editor, "e", editor, "editor")
@@ -420,10 +457,10 @@ func main() {
 	}
 
 	subcommand, err := subc.Parse()
-	if err == subc.ErrNoSubc {
+	if errors.Is(err, subc.ErrNoSubc) {
 		usage()
 		os.Exit(1)
-	} else if err == subc.ErrUsage {
+	} else if errors.Is(err, subc.ErrUsage) {
 		os.Exit(0)
 	} else if err != nil {
 		log.Fatal(err)
@@ -434,6 +471,8 @@ func main() {
 		usage()
 	case "ls":
 		list()
+	case "init":
+		initKeys()
 	case "edit":
 		edit(editor)
 	case "gen":
@@ -447,5 +486,4 @@ func main() {
 		usage()
 		os.Exit(1)
 	}
-
 }
