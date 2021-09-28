@@ -53,8 +53,11 @@ func (s Store) WriteEntry(entry string, content []byte) error {
 	if err != nil {
 		return err
 	}
-	defer fp.Close()
-	//defer os.Chmod(s.Path+"/"+entry, 0644)
+	defer func() {
+		fp.Close()
+		// make sure the entry has locked-down perms
+		os.Chmod(entryPath, 0644)
+	}()
 
 	contentBuffer := bytes.NewBuffer(content)
 	aw := armor.NewWriter(fp)

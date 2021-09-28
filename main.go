@@ -287,8 +287,10 @@ func edit(editor string) {
 	}
 
 	// when this function returns the file will be closed and removed
-	defer tmp.Close()
-	defer os.Remove(tmp.Name())
+	defer func() {
+		tmp.Close()
+		os.Remove(tmp.Name())
+	}()
 
 	// does the entry exist?
 	if _, err = os.Stat(storePath + "/" + entry); !os.IsNotExist(err) {
@@ -336,8 +338,10 @@ func generate(length int) {
 		log.Fatalf("error creating temporary file: %v", err)
 	}
 
-	defer tmp.Close()
-	defer os.Remove(tmp.Name())
+	defer func() {
+		tmp.Close()
+		os.Remove(tmp.Name())
+	}()
 
 	if _, err = os.Stat(storePath + "/" + entry); os.IsNotExist(err) {
 		contentBuffer := &bytes.Buffer{}
