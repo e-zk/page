@@ -96,6 +96,10 @@ func userDataDir() (string, error) {
 // Read the recipient file and return an age.X25519Recipient
 func getRecipients() (*age.X25519Recipient, error) {
 	var pubkey []byte
+	if _, err := os.Stat(recipientsPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("recipients file does not exist.\ndid you forget to run `page init'?")
+	}
+
 	pubkey, err := os.ReadFile(recipientsPath)
 	if err != nil {
 		return nil, nil
@@ -106,6 +110,10 @@ func getRecipients() (*age.X25519Recipient, error) {
 // Read the private key and return an age.X25519Identity
 func getIdentity() (*age.X25519Identity, error) {
 	var privkey []byte
+	if _, err := os.Stat(privateKeyPath); os.IsNotExist(err) {
+		return nil, fmt.Errorf("private key file does not exist.\ndid you forget to run `page init'?")
+	}
+
 	privkey, err := os.ReadFile(privateKeyPath)
 	if err != nil {
 		return nil, nil
@@ -148,8 +156,8 @@ func initKeys() {
 		}
 	}()
 
-	fmt.Fprintf(pkFd, "%s\n", pk)
-	fmt.Fprintf(rFd, "%s\n", pk.Recipient())
+	fmt.Fprintf(pkFd, "%s", pk)
+	fmt.Fprintf(rFd, "%s", pk.Recipient())
 }
 
 // List all password entries
@@ -206,13 +214,13 @@ func open(printPasswd bool) {
 	var content string
 	entry := subc.Sub("open").Arg(0)
 
-	rec, err := getRecipients()
-	if err != nil {
-		log.Fatalf("Error parsing recipients file: %v", err)
-	}
 	id, err := getIdentity()
 	if err != nil {
-		log.Fatalf("Error parsing private key file: %s", err)
+		log.Fatalf("error parsing private key file: %s", err)
+	}
+	rec, err := getRecipients()
+	if err != nil {
+		log.Fatalf("error parsing recipients file: %v", err)
 	}
 	s := store.Store{Path: storePath, Identity: id, Recipient: rec}
 
@@ -220,12 +228,6 @@ func open(printPasswd bool) {
 	if err != nil {
 		log.Fatal(err)
 	}
-
-	// ask for secret
-	//secret, err := term.AskPasswd()
-	//if err != nil {
-	//	log.Fatal(err)
-	//}
 
 	for _, line := range strings.Split(string(passwd), "\n") {
 		if strings.HasPrefix(line, "#") || line == "" {
@@ -268,20 +270,20 @@ func edit(editor string) {
 	entry := subc.Sub("edit").Arg(0)
 
 	// setup store
-	rec, err := getRecipients()
-	if err != nil {
-		log.Fatalf("Error parsing recipients file: %v", err)
-	}
 	id, err := getIdentity()
 	if err != nil {
-		log.Fatalf("Error parsing private key file: %s", err)
+		log.Fatalf("error parsing private key file: %s", err)
+	}
+	rec, err := getRecipients()
+	if err != nil {
+		log.Fatalf("error parsing recipients file: %v", err)
 	}
 	s := store.Store{Path: storePath, Identity: id, Recipient: rec}
 
 	// create temporary file
 	tmp, err := os.CreateTemp(os.TempDir(), tmpName)
 	if err != nil {
-		log.Fatalf("Error creating temporary file: %v", err)
+		log.Fatalf("error creating temporary file: %v", err)
 	}
 
 	// when this function returns the file will be closed and removed
@@ -294,12 +296,12 @@ func edit(editor string) {
 		// otherwise, copy the content to the tmpfile
 		content, err := s.ReadEntry(entry)
 		if err != nil {
-			log.Fatalf("Error during decryption: %v", err)
+			log.Fatalf("error during decryption: %v", err)
 		}
 		contentBuffer = bytes.NewBuffer(content)
 
 		if _, err = io.Copy(tmp, contentBuffer); err != nil {
-			log.Fatalf("Error writing to temporary file: %v", err)
+			log.Fatalf("error writing to temporary file: %v", err)
 		}
 
 	}
@@ -318,20 +320,20 @@ func generate(length int) {
 	entry := subc.Sub("gen").Arg(0)
 
 	// setup store
-	rec, err := getRecipients()
-	if err != nil {
-		log.Fatalf("Error parsing recipients file: %v", err)
-	}
 	id, err := getIdentity()
 	if err != nil {
-		log.Fatalf("Error parsing private key file: %s", err)
+		log.Fatalf("error parsing private key file: %s", err)
+	}
+	rec, err := getRecipients()
+	if err != nil {
+		log.Fatalf("error parsing recipients file: %v", err)
 	}
 	s := store.Store{Path: storePath, Identity: id, Recipient: rec}
 
 	// create temporary file
 	tmp, err := os.CreateTemp(os.TempDir(), tmpName)
 	if err != nil {
-		log.Fatalf("Error creating temporary file: %v", err)
+		log.Fatalf("error creating temporary file: %v", err)
 	}
 
 	defer tmp.Close()
@@ -353,7 +355,7 @@ func generate(length int) {
 
 		// only copy length bytes (runes) to tmp
 		if _, err = io.CopyN(tmp, contentBuffer, int64(length)); err != nil {
-			log.Fatalf("Error writing to temporary file: %v", err)
+			log.Fatalf("error writing to temporary file: %v", err)
 		}
 
 	} else {
@@ -369,8 +371,8 @@ func generate(length int) {
 }
 
 func main() {
-	//log.SetFlags(0 | log.Lshortfile)
-	log.SetFlags(0)
+	log.SetFlags(0 | log.Lshortfile)
+	//log.SetFlags(0)
 	log.SetPrefix("page: ")
 
 	var (
@@ -408,7 +410,7 @@ func main() {
 		subcommands
 	*/
 
-	subc.Usage = usage
+	//subc.Usage = usage
 
 	subc.Sub("help").Usage = func() {
 		errPrint("help: show help\n")
