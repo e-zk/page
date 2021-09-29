@@ -13,17 +13,17 @@ updated encrypted secret.
 
 since secrets are just plaintext files you can store whatever you want in them:
 passwords, notes, etc.
-when using the 'open' subcommand an entry's content is copied to the clipboard
+when using the `open' subcommand an entry's content is copied to the clipboard
 excluding any lines that start with a '#'.
 
  building 
 ----------
-to build run make:
+to build use make:
 
 $ make
 $ make install
 
-to install do a different prefix:
+to install page do a different prefix:
 
 $ make PREFIX=$SOME_PREFIX install
 
@@ -37,7 +37,7 @@ where <command> can be any of:
 * edit  create/edit an entry using $EDITOR
 * rm    remove password entry
 
-see 'page <command> -h' to read the help message for a specific subcommand.
+see `page <command> -h' to read the help message for a specific subcommand.
 
  environment
 -------------
@@ -56,13 +56,18 @@ $PAGE_SECRETS should point to a directory containing encrypted entries.
 
  key setup
 -----------
-in order to start using page you must first generate an age keypair. install
-age and use the age-keygen command:
+in order to start using page you must first generate an age keypair
+($PAGE_PRIVKEY and $PAGE_RECIPIENTS). this can be done by using the `init'
+subcommand:
+
+$ page init
+
+alternatively, you can install the age encryption tool and use age-keygen:
 
 $ age-keygen -o $PAGE_PRIVKEY
 Public key: age1[...]
 
-copy the public key into the $PAGE_RECIPIENTS file.
+copy the public key into the $PAGE_RECIPIENTS file (without the newline).
 it is also recommended to lock down the permissions of these files:
 
 $ chmod 0600 $PAGE_PRIVKEY
